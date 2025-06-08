@@ -10,7 +10,9 @@ const router = express.Router();
 
 // Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secure-secret-key-here';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+const JWT_EXPIRES_IN: number = 
+  Number(process.env.JWT_EXPIRES_IN_SECONDS)   // e.g. set env as "86400"
+  || 24 * 60 * 60;
 const RESET_TOKEN_EXPIRY = 3600000; // 1 hour in ms
 const EMAIL_CONFIG = {
   service: process.env.EMAIL_SERVICE || 'Gmail',
@@ -44,14 +46,13 @@ interface UserResponse {
   adminId?: number;
 }
 
+
+
 // Helper function to generate JWT token
 const generateToken = (payload: JwtPayload): string => {
-  const options: SignOptions = {
-    expiresIn: JWT_EXPIRES_IN
-  };
-  return jwt.sign(payload, JWT_SECRET, options);
+  // now expiresIn is a number, so it matches SignOptions.expiresIn
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 };
-
 // Register
 router.post('/register', async (req, res) => {
   const { email, password, role, name } = req.body;
@@ -70,19 +71,18 @@ router.post('/register', async (req, res) => {
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
     const emailVerificationExpires = new Date(Date.now() + RESET_TOKEN_EXPIRY);
     
-    const userData: any = {
+    const userData = {
       email,
       name,
       password: hashedPassword,
       role,
       isActive: role !== 'ADMIN',
       emailVerificationToken,
-      emailVerificationExpires
+      emailVerificationExpires,
+      ...(role === 'BUYER' && { buyerProfile: { create: {} } }),
+      ...(role === 'SELLER' && { sellerProfile: { create: {} } }),
+      ...(role === 'ADMIN' && { adminProfile: { create: {} } })
     };
-
-    if (role === 'BUYER') userData.buyerProfile = { create: {} };
-    if (role === 'SELLER') userData.sellerProfile = { create: {} };
-    if (role === 'ADMIN') userData.adminProfile = { create: {} };
 
     const user = await prisma.user.create({ data: userData });
 
@@ -154,10 +154,14 @@ router.post('/login', async (req, res) => {
 router.get('/verify-email', async (req, res) => {
   const { token } = req.query;
 
+  if (typeof token !== 'string') {
+    return res.status(400).json({ error: "Invalid token format" });
+  }
+
   try {
     const user = await prisma.user.findFirst({
       where: {
-        emailVerificationToken: token as string,
+        emailVerificationToken: token,
         emailVerificationExpires: { gt: new Date() }
       }
     });
@@ -189,11 +193,14 @@ router.post('/forgot-password', async (req, res) => {
     if (!user) return res.json({ message: "If account exists, reset email sent" });
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + RESET_TOKEN_EXPIRY);
+    const resetTokenExpires = new Date(Date.now() + RESET_TOKEN_EXPIRY);
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordResetToken: resetToken, passwordResetExpires: resetTokenExpiry }
+      data: { 
+        resetToken,
+        resetTokenExpires 
+      }
     });
 
     const resetUrl = `${APP_URL}/auth/reset-password?token=${resetToken}`;
@@ -217,8 +224,8 @@ router.post('/reset-password', async (req, res) => {
   try {
     const user = await prisma.user.findFirst({
       where: {
-        passwordResetToken: token,
-        passwordResetExpires: { gt: new Date() }
+        resetToken: token,
+        resetTokenExpires: { gt: new Date() }
       }
     });
 
@@ -229,8 +236,8 @@ router.post('/reset-password', async (req, res) => {
       where: { id: user.id },
       data: {
         password: hashedPassword,
-        passwordResetToken: null,
-        passwordResetExpires: null
+        resetToken: null,
+        resetTokenExpires: null
       }
     });
 
@@ -243,13 +250,18 @@ router.post('/reset-password', async (req, res) => {
 
 // Helper function to send emails
 async function sendEmail(to: string, subject: string, text: string) {
-  await transporter.sendMail({
-    from: `"SeatSnags" <${EMAIL_CONFIG.user}>`,
-    to,
-    subject,
-    text,
-    html: `<p>${text.replace(/\n/g, '<br>')}</p>`
-  });
+  try {
+    await transporter.sendMail({
+      from: `"SeatSnags" <${EMAIL_CONFIG.user}>`,
+      to,
+      subject,
+      text,
+      html: `<p>${text.replace(/\n/g, '<br>')}</p>`
+    });
+  } catch (error) {
+    console.error('Failed to send email:', error);
+    throw error;
+  }
 }
 
 export default router;
