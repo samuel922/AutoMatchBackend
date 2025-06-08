@@ -1,7 +1,7 @@
 // routes/buyerRoutes.js
 import express from 'express';
 import buyerOfferController from '../controllers/buyerOfferController.js';
-import { protect, authorize, requireVerified } from '../middleware/auth.js';
+import { protect, authorize, requireVerified } from '../middleware/auth.middleware.js';
 import { validateOffer } from '../middleware/validation.js';
 
 const router = express.Router();

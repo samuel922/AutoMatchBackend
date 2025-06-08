@@ -1,7 +1,7 @@
 // routes/eventRoutes.js
 import express from 'express';
 import eventController from '../controllers/eventController.js';
-import { protect } from '../middleware/auth.js';
+import { protect } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 

@@ -1,7 +1,7 @@
 // routes/sellerRoutes.js
 import express from 'express';
 import sellerListingController from '../controllers/sellerListingController.js';
-import { protect, authorize, requireVerified, requireStripeConnect } from '../middleware/auth.js';
+import { protect, authorize, requireVerified, requireStripeConnect } from '../middleware/auth.middleware.js';
 import { validateListing, validateBulkUpload } from '../middleware/validation.js';
 
 const router = express.Router();
