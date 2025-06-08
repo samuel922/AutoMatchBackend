@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  role          Role           @default(BUYER)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  buyerProfile  BuyerProfile?
+  sellerProfile SellerProfile?
+  adminProfile  AdminProfile?
+}
+
+enum Role {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+model BuyerProfile {
+  id     Int     @id @default(autoincrement())
+  userId Int     @unique
+  user   User    @relation(fields: [userId], references: [id])
+  points Int     @default(0)
+  offers Offer[]
+}
+
+model SellerProfile {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id])
+  inventory Ticket[]
+  rules     Rule[]
+}
+
+model AdminProfile {
+  id       Int      @id @default(autoincrement())
+  userId   Int      @unique
+  user     User     @relation(fields: [userId], references: [id])
+  listings Ticket[] @relation("AdminListings")
+}
+
+model Event {
+  id      Int      @id @default(autoincrement())
+  name    String
+  venue   String
+  date    DateTime
+  tickets Ticket[]
+  offers  Offer[]
+  rules   Rule[] // Added opposite relation for Rule.event
+}
+
+model Ticket {
+  id              Int           @id @default(autoincrement())
+  eventId         Int
+  event           Event         @relation(fields: [eventId], references: [id])
+  sellerId        Int
+  seller          SellerProfile @relation(fields: [sellerId], references: [id])
+  section         String
+  row             String
+  seat            String
+  price           Float?
+  status          TicketStatus  @default(PENDING)
+  listedBy        Int? // Admin user ID who listed/approved the ticket
+  listedByAdmin   AdminProfile? @relation("AdminListings", fields: [listedBy], references: [id])
+  listedAt        DateTime?
+  rejectionReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  transactions    Transaction[]
+}
+
+enum TicketStatus {
+  PENDING
+  AVAILABLE
+  SOLD
+  REJECTED
+}
+
+model Offer {
+  id           Int           @id @default(autoincrement())
+  buyerId      Int
+  buyer        BuyerProfile  @relation(fields: [buyerId], references: [id])
+  eventId      Int
+  event        Event         @relation(fields: [eventId], references: [id])
+  sections     String[]
+  maxPrice     Float
+  status       OfferStatus   @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+}
+
+enum OfferStatus {
+  ACTIVE
+  MATCHED
+  EXPIRED
+  CANCELLED
+}
+
+model Rule {
+  id          Int           @id @default(autoincrement())
+  sellerId    Int
+  seller      SellerProfile @relation(fields: [sellerId], references: [id])
+  eventId     Int?
+  event       Event?        @relation(fields: [eventId], references: [id])
+  section     String?
+  minPrice    Float
+  triggerTime Int? // minutes before event
+  isActive    Boolean       @default(true)
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  ticketId    Int
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+  offerId     Int
+  offer       Offer    @relation(fields: [offerId], references: [id])
+  price       Float
+  completedAt DateTime @default(now())
+}
